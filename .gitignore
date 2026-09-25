@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# Credentials — NEVER commit these.
+# Settings are now entered on the node's web portal and stored in NVS; this
+# stays ignored in case a local copy from the old compile-time flow lingers.
+# ---------------------------------------------------------------------------
+sg_secrets.h
+**/sg_secrets.h
+
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+build/
+*.bin
+*.elf
+*.map
+*.hex
+*.d
+*.o
+*.a
+
+# Flash / NVS dumps — these contain your credentials in plaintext
+nvs.bin
+*.nvs
+flash_dump*.bin
+
+# Serial capture logs
+*.log
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~

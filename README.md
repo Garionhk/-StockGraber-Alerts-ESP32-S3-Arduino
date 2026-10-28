@@ -9,15 +9,15 @@ ntfy, one-shot price alerts, plus remote commands (`status`, `list`, `<CODE>`,
 
 ## Prebuilt firmware
 
-**v1.1.0** is in [`dist/`](dist/): `stockgraber-v1.1.0-esp32s3-n16r8.bin`, a
+**v1.2.0** is in [`dist/`](dist/): `stockgraber-v1.2.0-esp32s3-n16r8.bin`, a
 merged image for a 16 MB ESP32-S3 N16R8 — no toolchain needed:
 
 ```
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 dist/stockgraber-v1.1.0-esp32s3-n16r8.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 dist/stockgraber-v1.2.0-esp32s3-n16r8.bin
 ```
 
 Then set it up from your phone (§4.1). Checksum, release notes and the full
-flashing guide: [`dist/RELEASE-v1.1.0.md`](dist/RELEASE-v1.1.0.md),
+flashing guide: [`dist/RELEASE-v1.2.0.md`](dist/RELEASE-v1.2.0.md),
 [`flash.md`](flash.md).
 
 ---
@@ -540,5 +540,11 @@ live price, failed-publish retry) and the multi-part splitter were run on the
 Mac against the real `String` class; the `range=1d` quote fields were checked
 against live Yahoo for US, Canada, Hong Kong, futures, index and crypto codes.
 Not yet run on the board.
+
+**v1.2.0 (network calls in their own task) was run on the board.** Wi-Fi join,
+NTP, the startup notice, ntfy polling and three end-of-day reports, with the
+settings page probed every 0.5 s: 297 of 297 answered, the slowest in 0.27 s.
+The v1.1.0 code beforehand ran an hour there without a crash and answered
+`status` commands; price alerts firing on the board are still untested.
 
 Build size: ~1.15 MB (36% of the 3 MB app partition), 47.7 KB static RAM.

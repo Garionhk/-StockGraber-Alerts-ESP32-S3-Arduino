@@ -39,13 +39,19 @@ static const uint32_t FETCH_GAP_MS    = 300;      // between report fetches (Yah
 static const uint32_t WIFI_TIMEOUT_MS = 30000;    // first join at boot
 static const uint32_t WIFI_RETRY_MS   = 10000;    // re-join while in AP fallback
 static const uint32_t BOOT_WINDOW_MS  = 2000;     // time to press BOOT for setup
+static const uint32_t NET_STACK_BYTES = 12288;    // TLS + JSON; loop() gets 8 KB
 
 // What the node is doing. Setup blocks inside setup() until a save restarts
 // the board; the other two alternate as Wi-Fi comes and goes.
 enum class Mode { SetupPortal, ApFallback, Online };
 
+// Startup notice owed by the network task: set by the loop when it goes
+// online, cleared once the notice is out.
+enum class Announce { None, Boot, Reconnect };
+
 Settings          g_settings;
-static Mode       g_mode = Mode::SetupPortal;
+static volatile Mode     g_mode = Mode::SetupPortal;
+static volatile Announce g_announce = Announce::None;
 static String     g_since = "10s";     // start from now, not ntfy's cache
 static uint32_t   g_lastPoll     = 0;
 static uint32_t   g_lastDueCheck = 0;
@@ -104,8 +110,8 @@ static const char* resetReasonName() {
 // to have the serial monitor open, and the reset reason distinguishes a plain
 // power cycle from a watchdog trip or a brownout. Also sent when Wi-Fi comes
 // back after a fallback, since the IP -- and so the settings URL -- may differ.
-static void announceStart(bool atBoot) {
-  if (!g_settings.ntfyTopic.length()) return;
+static void announceStart(const Settings& s, bool atBoot) {
+  if (!s.ntfyTopic.length()) return;
   String body = (atBoot ? "Reset: " + String(resetReasonName())
                         : String("Wi-Fi reconnected")) +
                 "\nIP: " + WiFi.localIP().toString() +
@@ -117,7 +123,7 @@ static void announceStart(bool atBoot) {
   if (ESP.getPsramSize())
     body += "\nPSRAM: " + String(ESP.getPsramSize() / 1024) + " KB";
   String err;
-  bool ok = ntfyPublish(g_settings,
+  bool ok = ntfyPublish(s,
                         atBoot ? "StockGraber - node started"
                                : "StockGraber - back online",
                         body, 3, NTFY_BOT_TAG, err);
@@ -141,7 +147,7 @@ static Analysis analyseSymbol(const String& symbol, double prox) {
   return calcAnalyze(symbol, closes, highs, lows, lastDate, prox);
 }
 
-static void sendMarketReport(const char* market,
+static void sendMarketReport(const Settings& s, const char* market,
                              const std::vector<String>& symbols) {
   // The date is only known once a fetch succeeds, but full parts go out as they
   // fill, so title the report from the market's local date up front.
@@ -152,10 +158,10 @@ static void sendMarketReport(const char* market,
 
   // A large watchlist can outgrow ntfy's 4 KB body; the chunker splits it, and
   // only the part holding a golden/death cross is sent at the higher priority.
-  NtfyChunker out(g_settings, title, 3, tags, 4, crossTags);
+  NtfyChunker out(s, title, 3, tags, 4, crossTags);
   for (size_t i = 0; i < symbols.size(); i++) {
     if (i) delay(FETCH_GAP_MS);
-    Analysis a = analyseSymbol(symbols[i], g_settings.proximityPct);
+    Analysis a = analyseSymbol(symbols[i], s.proximityPct);
     if (a.ok && (a.golden || a.death)) out.markUrgent();
     out.addLine(calcSymbolLine(a));
     esp_task_wdt_reset();             // fetches are slow; keep the dog happy
@@ -167,12 +173,12 @@ static void sendMarketReport(const char* market,
       (out.parts() > 1 ? " (" + String(out.parts()) + " parts)" : String("")));
 }
 
-static void checkDue() {
-  if (!g_settings.reportEnabled || !g_settings.ntfyTopic.length()) return;
+static void checkDue(const Settings& s) {
+  if (!s.reportEnabled || !s.ntfyTopic.length()) return;
   std::vector<String> all = wlAll();
   if (all.empty()) return;
 
-  int delay_ = g_settings.reportDelayMin;
+  int delay_ = s.reportDelayMin;
   if (delay_ < 15) delay_ = 15;
   if (delay_ > 30) delay_ = 30;
 
@@ -191,24 +197,33 @@ static void checkDue() {
 
     // Mark before sending so a failure can't refire every minute.
     cfgSetLastSent(market, today);
-    sendMarketReport(market, mine);
+    sendMarketReport(s, market, mine);
   }
 }
 
 // ---- command path --------------------------------------------------------
 
-static void checkCommands() {
-  if (!g_settings.cmdEnabled || !g_settings.ntfyTopic.length()) return;
+static void checkCommands(const Settings& s) {
+  if (!s.cmdEnabled || !s.ntfyTopic.length()) return;
 
   std::vector<String> messages;
-  if (!ntfyPoll(g_settings, g_since, messages)) return;
+  if (!ntfyPoll(s, g_since, messages)) return;
 
   for (const String& text : messages) {
     String title, body;
-    if (!cmdHandle(text, g_settings, title, body)) continue;   // ignored
+    if (!cmdHandle(text, s, title, body)) continue;   // ignored
     String err;
-    ntfyPublish(g_settings, title, body, 3, NTFY_BOT_TAG, err);
-    log("replied to: " + text.substring(0, 40));
+    ntfyPublish(s, title, body, 3, NTFY_BOT_TAG, err);
+
+    // A handled command starts with the passphrase; keep it out of the log.
+    String shown = text;
+    shown.trim();
+    if (s.cmdSecret.length()) {
+      int sp = shown.indexOf(' ');
+      shown = sp < 0 ? String("") : shown.substring(sp + 1);
+      shown.trim();
+    }
+    log("replied to: " + shown.substring(0, 40));
     esp_task_wdt_reset();
 
     if (cmdRestartPending()) {
@@ -261,13 +276,47 @@ static void runSetupPortal() {
   // A save restarts the board, so this is never reached.
 }
 
+// NTP and the startup notice are network calls, so they are left to the
+// network task; the settings page is up as soon as this returns.
 static void goOnline(bool atBoot) {
-  g_mode = Mode::Online;
-  if (ntpSync()) g_lastNtpSync = millis();
   webconfig::beginSTA();
-  announceStart(atBoot);
+  g_announce = atBoot ? Announce::Boot : Announce::Reconnect;
+  g_mode = Mode::Online;
   log("running; topic: " + g_settings.ntfyTopic +
       "; settings: " + webconfig::settingsUrl());
+}
+
+// Everything that talks to ntfy, Yahoo or NTP runs here. Those calls block for
+// seconds at a time (minutes for a big report), and on the loop task that
+// froze the settings page with them. Works from a settings snapshot per pass.
+static void netTask(void*) {
+  esp_task_wdt_add(NULL);
+  for (;;) {
+    esp_task_wdt_reset();
+    if (g_mode == Mode::Online && WiFi.status() == WL_CONNECTED) {
+      Settings s = cfgSnapshot();
+
+      if (g_announce != Announce::None) {
+        bool atBoot = g_announce == Announce::Boot;
+        g_announce = Announce::None;
+        if (ntpSync()) g_lastNtpSync = millis();
+        announceStart(s, atBoot);
+      }
+      if (millis() - g_lastPoll >= (uint32_t)s.pollSeconds * 1000UL) {
+        g_lastPoll = millis();
+        checkCommands(s);
+      }
+      if (millis() - g_lastDueCheck >= DUE_CHECK_MS) {
+        g_lastDueCheck = millis();
+        checkDue(s);
+      }
+      alertsTick(s);                     // at most one quote per pass
+      if (millis() - g_lastNtpSync >= NTP_RESYNC_MS) {
+        if (ntpSync()) g_lastNtpSync = millis();
+      }
+    }
+    delay(10);
+  }
 }
 
 // Wi-Fi is configured but unreachable. Bring the portal up so the settings can
@@ -310,6 +359,10 @@ void setup() {
   esp_task_wdt_reconfigure(&wdtCfg);
   esp_task_wdt_add(NULL);
 
+  // Same core and priority as loop(); both block in socket waits, not spins.
+  xTaskCreatePinnedToCore(netTask, "sg_net", NET_STACK_BYTES, nullptr, 1,
+                          nullptr, ARDUINO_RUNNING_CORE);
+
   if (wifiConnect(g_settings)) goOnline(/*atBoot=*/true);
   else                         startApFallback();
 }
@@ -336,22 +389,10 @@ void loop() {
       break;
 
     case Mode::Online:
+      // Polls, reports and alerts run in netTask; this only watches Wi-Fi.
       if (WiFi.status() != WL_CONNECTED) {
         log("wifi lost");
         startApFallback();
-        break;
-      }
-      if (millis() - g_lastPoll >= (uint32_t)g_settings.pollSeconds * 1000UL) {
-        g_lastPoll = millis();
-        checkCommands();
-      }
-      if (millis() - g_lastDueCheck >= DUE_CHECK_MS) {
-        g_lastDueCheck = millis();
-        checkDue();
-      }
-      alertsTick(g_settings);            // at most one quote per pass
-      if (millis() - g_lastNtpSync >= NTP_RESYNC_MS) {
-        if (ntpSync()) g_lastNtpSync = millis();
       }
       break;
   }

@@ -358,7 +358,7 @@ void handleSave() {
   if (!wlReplace(watch)) { sendForm("Could not write the watchlist to flash."); return; }
   if (!alReplace(alerts)) { sendForm("Could not write the price alerts to flash."); return; }
   if (!cfgSave(s))       { sendForm("Could not write settings to flash."); return; }
-  g_settings = s;
+  cfgSetCurrent(s);
   savedFlag = true;
 
   String p = FPSTR(PAGE_HEAD);

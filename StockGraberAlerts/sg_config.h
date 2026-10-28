@@ -39,6 +39,12 @@ struct Settings {
 
 extern Settings g_settings;
 
+// g_settings is replaced by the settings page (loop task) while the network
+// task works from it, so the network task takes a copy rather than reading it
+// in place, and the page swaps it under the same lock.
+Settings cfgSnapshot();
+void     cfgSetCurrent(const Settings& s);
+
 // Username paired with Settings::adminPass on the settings page.
 static const char* const ADMIN_USER = "admin";
 

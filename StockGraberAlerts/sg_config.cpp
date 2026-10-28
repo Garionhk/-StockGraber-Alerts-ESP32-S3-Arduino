@@ -9,6 +9,24 @@ static const char* SETTING_KEYS[] = {
   "admpass", "rep_on", "cmd_on", "delay", "prox", "poll", "ok",
 };
 
+static SemaphoreHandle_t settingsLock() {
+  static SemaphoreHandle_t m = xSemaphoreCreateMutex();
+  return m;
+}
+
+Settings cfgSnapshot() {
+  xSemaphoreTake(settingsLock(), portMAX_DELAY);
+  Settings s = g_settings;
+  xSemaphoreGive(settingsLock());
+  return s;
+}
+
+void cfgSetCurrent(const Settings& s) {
+  xSemaphoreTake(settingsLock(), portMAX_DELAY);
+  g_settings = s;
+  xSemaphoreGive(settingsLock());
+}
+
 void cfgLoad(Settings& s) {
   Preferences p;
   p.begin(NS, true);                       // read-only

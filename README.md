@@ -4,6 +4,11 @@ The C++ / Arduino version of the node: per-market end-of-day reports pushed to
 ntfy, one-shot price alerts, plus remote commands (`status`, `list`, `<CODE>`,
 `add`, `remove`, `alert`, `help`) answered from your phone. Same behaviour as the Raspberry Pi daemon.
 
+> ⚠️ **Not financial advice.** StockGraber is a charting/learning tool. The
+> indicators and signals it draws (golden/death crosses, RSI, MACD, etc.) are
+> common technical-analysis conventions, not buy/sell recommendations. No
+> indicator reliably predicts price.
+
 > ⚠️ **Give this node its own ntfy topic** (e.g. `<your-topic>-esp`). On the
 > Pi's topic you'd get duplicate reports and two bots answering every command.
 

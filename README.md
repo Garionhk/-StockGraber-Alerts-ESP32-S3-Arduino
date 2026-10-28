@@ -553,3 +553,10 @@ The v1.1.0 code beforehand ran an hour there without a crash and answered
 `status` commands; price alerts firing on the board are still untested.
 
 Build size: ~1.15 MB (36% of the 3 MB app partition), 47.7 KB static RAM.
+
+## Disclaimer
+
+StockGraber is for **educational and informational purposes only** and is **not
+financial advice**. Do your own research and consult a qualified professional
+before making investment decisions. Market data is provided by Yahoo Finance and
+may be delayed or inaccurate.

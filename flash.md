@@ -64,11 +64,11 @@ mkdir -p dist
 ```
 
 ```bash
-cp StockGraberAlerts/build/esp32.esp32.esp32s3/StockGraberAlerts.ino.merged.bin dist/stockgraber-v1.1.0-esp32s3-n16r8.bin
+cp StockGraberAlerts/build/esp32.esp32.esp32s3/StockGraberAlerts.ino.merged.bin dist/stockgraber-v1.2.0-esp32s3-n16r8.bin
 ```
 
 ```bash
-cd dist && shasum -a 256 stockgraber-v1.1.0-esp32s3-n16r8.bin > stockgraber-v1.1.0-esp32s3-n16r8.bin.sha256
+cd dist && shasum -a 256 stockgraber-v1.2.0-esp32s3-n16r8.bin > stockgraber-v1.2.0-esp32s3-n16r8.bin.sha256
 ```
 
 `.gitignore` excludes `*.bin`, so the image is not committed — attach it to a
@@ -79,7 +79,7 @@ release instead.
 Do this before publishing:
 
 ```bash
-strings dist/stockgraber-v1.1.0-esp32s3-n16r8.bin | grep -iE "your-ssid|your-wifi-password|your-topic|your-passphrase"
+strings dist/stockgraber-v1.2.0-esp32s3-n16r8.bin | grep -iE "your-ssid|your-wifi-password|your-topic|your-passphrase"
 ```
 
 Substitute your own network name, password, topic and passphrase. Expect **no
@@ -89,7 +89,7 @@ form contains `<input type=password …>` markup.
 Sanity-check that `strings` actually read the file. This should print `1`:
 
 ```bash
-strings dist/stockgraber-v1.1.0-esp32s3-n16r8.bin | grep -c "StockGraber Alerts v"
+strings dist/stockgraber-v1.2.0-esp32s3-n16r8.bin | grep -c "StockGraber Alerts v"
 ```
 
 ---
@@ -121,7 +121,7 @@ culprit.
 ### Verify the download
 
 ```bash
-shasum -a 256 -c stockgraber-v1.1.0-esp32s3-n16r8.bin.sha256
+shasum -a 256 -c stockgraber-v1.2.0-esp32s3-n16r8.bin.sha256
 ```
 
 ### Erase, then write
@@ -135,7 +135,7 @@ esptool --port /dev/cu.usbmodem14401 erase-flash
 ```
 
 ```bash
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 stockgraber-v1.1.0-esp32s3-n16r8.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 stockgraber-v1.2.0-esp32s3-n16r8.bin
 ```
 
 The merged image already contains the bootloader (`0x0` on the S3), partition
@@ -162,7 +162,7 @@ StockGraber - node started
 Reset: power-on
 IP: 192.168.1.42
 Settings: http://192.168.1.42
-Firmware: v1.1.0
+Firmware: v1.2.0
 Watchlist: 4 of 200 symbols
 Heap: 158 KB free
 PSRAM: 8192 KB

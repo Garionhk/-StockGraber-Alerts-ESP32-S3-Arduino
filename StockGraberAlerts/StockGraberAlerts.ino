@@ -30,7 +30,7 @@
 #include "sg_webconfig.h"
 #include "sg_yahoo.h"
 
-static const char*    SG_VERSION      = "1.1.0";
+static const char*    SG_VERSION      = "1.2.0";
 
 static const uint32_t WDT_TIMEOUT_S   = 120;      // reboot if a loop wedges
 static const uint32_t NTP_RESYNC_MS   = 24UL * 3600UL * 1000UL;

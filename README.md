@@ -194,7 +194,7 @@ Not stored in NVS — a normal reflash is enough.
 | `WL_MAX` | `sg_config.h` | 73 | `200` — max watchlist size (see §8) |
 | `AL_MAX` | `sg_alerts.h` | 28 | `50` — max price alerts (see §8) |
 | `ALERT_CHECK_MS` | `sg_alerts.cpp` | 11 | 5 min between price-alert sweeps |
-| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.1.0"` — shown at boot and in the startup notice; bump per release |
+| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.2.0"` — shown at boot and in the startup notice; bump per release |
 | `WDT_TIMEOUT_S` | `StockGraberAlerts.ino` | 34 | `120` — watchdog reboot timeout |
 | `NTP_RESYNC_MS` | `StockGraberAlerts.ino` | 35 | 24 h between clock resyncs |
 | `DUE_CHECK_MS` | `StockGraberAlerts.ino` | 36 | 60 s between "is a market due?" checks |
@@ -296,7 +296,7 @@ arduino-cli monitor -p /dev/cu.usbmodem14401 --config baudrate=115200
 A healthy boot:
 
 ```
-[sg] StockGraber Alerts v1.1.0 (ESP32-S3) starting
+[sg] StockGraber Alerts v1.2.0 (ESP32-S3) starting
 [sg] PSRAM: 8388608 bytes free 8386096
 [sg] press BOOT now to open the setup portal
 [sg] wifi: connecting to your-wifi
@@ -317,7 +317,7 @@ StockGraber - node started
 Reset: power-on
 IP: 192.168.1.42
 Settings: http://192.168.1.42
-Firmware: v1.1.0
+Firmware: v1.2.0
 Watchlist: 5 of 200 symbols
 Heap: 158 KB free
 PSRAM: 8192 KB

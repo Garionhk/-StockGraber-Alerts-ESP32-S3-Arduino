@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
+#include <esp_task_wdt.h>
 #include <time.h>
 
 static const char* BASE = "https://query1.finance.yahoo.com/v8/finance/chart/";
@@ -64,8 +65,14 @@ static String dateFromTs(long long ts) {
 //
 // A 429 means Yahoo is throttling. One retry after a short pause is usually
 // enough when a long `status` or report briefly runs ahead of it.
+//
+// A negative code (HTTP -1, "connection refused") is the TCP/TLS connect timing
+// out: Yahoo's edge intermittently drops new connections when a `status` opens
+// dozens in a row. Those are retried too, with a growing pause.
+static const int YAHOO_ATTEMPTS = 3;
+
 static bool yahooGet(const String& url, String& payload, String& err) {
-  for (int attempt = 0; attempt < 2; attempt++) {
+  for (int attempt = 0; attempt < YAHOO_ATTEMPTS; attempt++) {
     WiFiClientSecure client;
     client.setInsecure();          // no CA bundle -- see README's limitations
     client.setTimeout(15000);
@@ -93,9 +100,13 @@ static bool yahooGet(const String& url, String& payload, String& err) {
     http.end();
     // 401/403 would mean Yahoo started demanding a cookie/crumb; 429 = throttled
     err = "HTTP " + String(code);
-    if (code != 429 || attempt) return false;
-    Serial.println("[sg] yahoo: HTTP 429, retrying in 2 s");
-    delay(YAHOO_RETRY_MS);
+    bool retryable = code == 429 || code < 0;
+    if (!retryable || attempt + 1 >= YAHOO_ATTEMPTS) return false;
+    uint32_t wait = YAHOO_RETRY_MS * (attempt + 1);
+    Serial.println("[sg] yahoo: " + err + ", retry " + String(attempt + 1) +
+                   " in " + String(wait / 1000) + " s");
+    esp_task_wdt_reset();
+    delay(wait);
   }
   return false;
 }

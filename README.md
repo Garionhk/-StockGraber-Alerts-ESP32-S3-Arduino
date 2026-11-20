@@ -1,5 +1,7 @@
 # StockGraber Alerts — ESP32-S3 (Arduino)
 
+📺 Video walkthrough: https://youtu.be/AS1tXet5ko8
+
 The C++ / Arduino version of the node: per-market end-of-day reports pushed to
 ntfy, one-shot price alerts, plus remote commands (`status`, `list`, `<CODE>`,
 `add`, `remove`, `alert`, `help`) answered from your phone. Same behaviour as the Raspberry Pi daemon.

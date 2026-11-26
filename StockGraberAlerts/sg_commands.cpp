@@ -263,11 +263,20 @@ bool cmdHandle(const String& text, const Settings& s, String& title, String& bod
   }
 
   if (low == "alerts") {
-    std::vector<Alert> list = alAll();
+    // Grouped by market like status, A-Z within each, lowest target first.
+    std::vector<Alert> list = alSorted();
     title = "StockGraber - price alerts";
     if (list.empty()) { body = "No price alerts set."; return true; }
     body = String((int)list.size()) + " of " + String((int)AL_MAX) + ":";
-    for (const Alert& a : list) body += "\n" + alDescribe(a);
+    const char* group = nullptr;
+    for (const Alert& a : list) {
+      const char* m = marketOf(a.symbol);
+      if (!group || strcmp(group, m) != 0) {
+        body += String("\n-- ") + marketLabel(m) + " --";
+        group = m;
+      }
+      body += "\n" + alDescribe(a);
+    }
     return true;
   }
 

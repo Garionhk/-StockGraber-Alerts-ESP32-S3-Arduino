@@ -168,7 +168,7 @@ void sendForm(const String& error) {
        "Yahoo.</small>";
 
   String alerts;
-  for (const Alert& a : alAll()) {
+  for (const Alert& a : alSorted()) {
     alerts += a.symbol + (a.above ? " > " : " < ") + alFmtPrice(a.target) + "\n";
   }
   p += "<h2>Price alerts</h2>";

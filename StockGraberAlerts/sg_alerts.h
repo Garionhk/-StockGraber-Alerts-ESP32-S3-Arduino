@@ -28,6 +28,8 @@ struct Alert {
 static const size_t AL_MAX = 50;
 
 std::vector<Alert> alAll();
+// alAll() for display: by market, then code A-Z, then target low to high.
+std::vector<Alert> alSorted();
 bool alReplace(const std::vector<Alert>& list);   // false if NVS refused it
 bool alAdd(const Alert& a);
 

@@ -18,7 +18,9 @@ const char* marketOf(const String& symbol);
 int         marketRank(const char* market);
 // Sorts for display: by market in MARKET_ORDER, then by code A-Z, ignoring
 // case and an index's leading '^' (so ^DJI sits among the D's).
-void        sortByMarket(std::vector<String>& symbols);        // "US", "HK", "FX", "CRYPTO", ...
+void        sortByMarket(std::vector<String>& symbols);
+// The ordering sortByMarket uses: true when `a` comes before `b`.
+bool        marketLess(const String& a, const String& b);        // "US", "HK", "FX", "CRYPTO", ...
 const char* marketLabel(const char* market);       // "Hong Kong", "Crypto", ...
 const char* marketTz(const char* market);          // POSIX TZ string
 int         marketCloseMinutes(const char* market);// minutes past local midnight

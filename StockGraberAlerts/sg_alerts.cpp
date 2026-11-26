@@ -1,5 +1,6 @@
 #include "sg_alerts.h"
 
+#include <algorithm>
 #include <time.h>
 
 #include "sg_calc.h"
@@ -179,6 +180,15 @@ String alFmtPrice(double v) {
   char buf[24];
   snprintf(buf, sizeof(buf), "%.6g", v);      // 0.081234, not 0.08
   return String(buf);
+}
+
+std::vector<Alert> alSorted() {
+  std::vector<Alert> list = alAll();
+  std::stable_sort(list.begin(), list.end(), [](const Alert& a, const Alert& b) {
+    if (a.symbol != b.symbol) return marketLess(a.symbol, b.symbol);
+    return a.target < b.target;
+  });
+  return list;
 }
 
 String alDescribe(const Alert& a) {

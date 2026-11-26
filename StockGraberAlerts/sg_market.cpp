@@ -124,11 +124,12 @@ static String sortKey(const String& symbol) {
   return k;
 }
 
+bool marketLess(const String& a, const String& b) {
+  int ra = marketRank(marketOf(a)), rb = marketRank(marketOf(b));
+  if (ra != rb) return ra < rb;
+  return strcmp(sortKey(a).c_str(), sortKey(b).c_str()) < 0;
+}
+
 void sortByMarket(std::vector<String>& symbols) {
-  std::stable_sort(symbols.begin(), symbols.end(),
-                   [](const String& a, const String& b) {
-    int ra = marketRank(marketOf(a)), rb = marketRank(marketOf(b));
-    if (ra != rb) return ra < rb;
-    return strcmp(sortKey(a).c_str(), sortKey(b).c_str()) < 0;
-  });
+  std::stable_sort(symbols.begin(), symbols.end(), marketLess);
 }

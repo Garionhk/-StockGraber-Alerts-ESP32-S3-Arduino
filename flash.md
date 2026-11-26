@@ -67,8 +67,14 @@ mkdir -p dist
 cp StockGraberAlerts/build/esp32.esp32.esp32s3/StockGraberAlerts.ino.merged.bin dist/stockgraber-v1.2.2-esp32s3-n16r8.bin
 ```
 
+The app on its own is the upgrade file:
+
 ```bash
-cd dist && shasum -a 256 stockgraber-v1.2.2-esp32s3-n16r8.bin > stockgraber-v1.2.2-esp32s3-n16r8.bin.sha256
+cp StockGraberAlerts/build/esp32.esp32.esp32s3/StockGraberAlerts.ino.bin dist/stockgraber-v1.2.2-esp32s3-n16r8-app.bin
+```
+
+```bash
+cd dist && shasum -a 256 stockgraber-v1.2.2-esp32s3-n16r8.bin > stockgraber-v1.2.2-esp32s3-n16r8.bin.sha256 && shasum -a 256 stockgraber-v1.2.2-esp32s3-n16r8-app.bin > stockgraber-v1.2.2-esp32s3-n16r8-app.bin.sha256
 ```
 
 `.gitignore` excludes `*.bin`, so the image is not committed — attach it to a
@@ -124,11 +130,29 @@ culprit.
 shasum -a 256 -c stockgraber-v1.2.2-esp32s3-n16r8.bin.sha256
 ```
 
-### Erase, then write
+For an upgrade, check the app file instead:
+
+```bash
+shasum -a 256 -c stockgraber-v1.2.2-esp32s3-n16r8-app.bin.sha256
+```
+
+### Upgrading a StockGraber node
+
+Write **only the app**, at `0x10000`. Settings, watchlist and price alerts are
+kept, as long as the node already runs StockGraber (same partition table):
+
+```bash
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x10000 stockgraber-v1.2.2-esp32s3-n16r8-app.bin
+```
+
+**Do not write the merged image to upgrade.** It covers the whole 16 MB,
+including blank space where the settings live (`0x9000`), so it wipes the
+Wi-Fi, ntfy settings and watchlist even without an erase.
+
+### New board: erase, then write
 
 Erasing first avoids inheriting stale settings from whatever was on the board
-before. **Skip the erase when upgrading a StockGraber node** — it would wipe the
-settings and watchlist.
+before.
 
 ```bash
 esptool --port /dev/cu.usbmodem14401 erase-flash
@@ -177,9 +201,10 @@ command list. Serial runs at **115200 baud** if anything goes wrong.
 
 ## 5. Notes
 
-- **Reflashing does not erase settings.** NVS (`0x9000`, 20 KB) lives outside
-  the application partition, so an upgrade keeps the configuration and the
-  watchlist.
+- **Upgrading with the app file keeps settings.** NVS (`0x9000`, 20 KB) lives
+  outside the application partition, so writing the app at `0x10000` keeps the
+  configuration and the watchlist. The merged image does not: it rewrites NVS
+  as blank flash.
 - **Returning a node to setup mode** needs no USB: press **RST** (EN), release,
   then press **BOOT** within 2 s; or send `<passphrase> factoryreset` over ntfy
   (keeps the watchlist).

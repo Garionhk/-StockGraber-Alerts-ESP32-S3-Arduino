@@ -16,14 +16,22 @@ ntfy, one-shot price alerts, plus remote commands (`status`, `list`, `<CODE>`,
 
 ## Prebuilt firmware
 
-**v1.2.2** is in [`dist/`](dist/): `stockgraber-v1.2.2-esp32s3-n16r8.bin`, a
-merged image for a 16 MB ESP32-S3 N16R8 — no toolchain needed:
+**v1.2.2** is on the [releases page](https://github.com/Garionhk/-StockGraber-Alerts-ESP32-S3-Arduino/releases)
+for a 16 MB ESP32-S3 N16R8 — no toolchain needed. **New board:** write the
+merged image, then set it up from your phone (§4.1):
 
 ```
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 dist/stockgraber-v1.2.2-esp32s3-n16r8.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 stockgraber-v1.2.2-esp32s3-n16r8.bin
 ```
 
-Then set it up from your phone (§4.1). Checksum, release notes and the full
+**Upgrading a StockGraber node:** write only the app, at `0x10000`. The merged
+image would overwrite the saved settings and watchlist with blank flash:
+
+```
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x10000 stockgraber-v1.2.2-esp32s3-n16r8-app.bin
+```
+
+ Checksum, release notes and the full
 flashing guide: [`dist/RELEASE-v1.2.2.md`](dist/RELEASE-v1.2.2.md),
 [`flash.md`](flash.md).
 
@@ -282,6 +290,10 @@ boot in §6.
 
 Compile, upload. One pass. Settings and watchlist are preserved — ordinary
 reflashing does not touch NVS.
+
+With the prebuilt firmware, upgrade with the `-app.bin` file at `0x10000`
+(see *Prebuilt firmware* above). The merged image rewrites NVS as blank flash
+and wipes the settings.
 
 ### Arduino IDE equivalent
 

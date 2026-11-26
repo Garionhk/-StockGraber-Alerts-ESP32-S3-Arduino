@@ -35,19 +35,35 @@ still come back empty.
 
 | File | For |
 | --- | --- |
-| `stockgraber-v1.2.2-esp32s3-n16r8.bin` | ESP32-S3 N16R8 (16 MB flash, 8 MB octal PSRAM) — merged image, write at `0x0` |
+| `stockgraber-v1.2.2-esp32s3-n16r8-app.bin` | **Upgrading** a StockGraber node — app only, write at `0x10000`; keeps settings |
+| `stockgraber-v1.2.2-esp32s3-n16r8.bin` | **New board** — ESP32-S3 N16R8 (16 MB flash, 8 MB octal PSRAM), merged image, write at `0x0` |
 
-SHA-256: `bc33212e2680ab949279a07c2abcc8df21a0ee6da95630919bb47cb88898fa2b`
-
-```bash
-esptool --port <PORT> --baud 460800 write-flash 0x0 stockgraber-v1.2.2-esp32s3-n16r8.bin
-```
+SHA-256:
+- app: `074df2b065535d6f29fbb4a314078677723620cadd5ab8a43b009b2c71e26ac5`
+- merged: `bc33212e2680ab949279a07c2abcc8df21a0ee6da95630919bb47cb88898fa2b`
 
 Full instructions: `flash.md`.
 
 ## Upgrading from v1.0.0 – v1.2.1
 
-Flash **without erasing**. Settings, watchlist and price alerts are kept.
+Write the **app file only**. Settings, watchlist and price alerts are kept:
+
+```bash
+esptool --port <PORT> --baud 460800 write-flash 0x10000 stockgraber-v1.2.2-esp32s3-n16r8-app.bin
+```
+
+Do **not** write the merged image to upgrade, even without erasing. It covers
+the whole 16 MB, including the blank settings area, so it wipes Wi-Fi, ntfy
+settings and the watchlist. Earlier release notes said otherwise; that was
+wrong.
+
+## New board
+
+```bash
+esptool --port <PORT> --baud 460800 write-flash 0x0 stockgraber-v1.2.2-esp32s3-n16r8.bin
+```
+
+Then join the `StockGraber-Setup-XXXX` Wi-Fi to set it up.
 
 ## Build
 

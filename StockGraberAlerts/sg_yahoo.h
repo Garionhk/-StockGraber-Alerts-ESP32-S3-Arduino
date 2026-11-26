@@ -11,7 +11,8 @@
 
 // Returns true on success. On failure `err` explains why and the vectors are
 // left empty. Bars with a null close/high/low are dropped, keeping all three
-// series index-aligned.
+// series index-aligned -- except the newest, which is filled in from the live
+// quote when Yahoo leaves the current session's bar empty.
 bool yahooFetch(const String& symbol,
                 std::vector<double>& closes,
                 std::vector<double>& highs,

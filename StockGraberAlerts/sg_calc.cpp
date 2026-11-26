@@ -68,7 +68,8 @@ Analysis calcAnalyze(const String& symbol,
 
   a.close = closes[closes.size() - 1];
   double prev = closes[closes.size() - 2];
-  a.changePct = prev ? (a.close - prev) / prev * 100.0 : 0.0;
+  a.change = a.close - prev;
+  a.changePct = prev ? a.change / prev * 100.0 : 0.0;
 
   crossOnLastBar(closes, a.golden, a.death);
 
@@ -133,6 +134,19 @@ static String padTo(const String& text, int width) {
   return out;
 }
 
+// Signed price change: "+6.08", "-1,234.50". A move under 0.01 (currencies)
+// gets four decimals so it doesn't read as "+0.00".
+static String fmtChange(double d) {
+  double mag = d < 0 ? -d : d;
+  const char* sign = d < 0 ? "-" : "+";
+  if (mag > 0 && mag < 0.01) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%.4f", mag);
+    return String(sign) + buf;
+  }
+  return String(sign) + calcFmtPrice(mag);
+}
+
 String calcSymbolLine(const Analysis& a) {
   String name = calcDisplayName(a.symbol);
   if (!a.ok) return padTo(name, 10) + " — no data";
@@ -144,8 +158,8 @@ String calcSymbolLine(const Analysis& a) {
   char pct[24];
   snprintf(pct, sizeof(pct), "%.2f", mag);
 
-  String line = padTo(name, 10) + " " + calcFmtPrice(a.close) + "  " +
-                arrow + " " + sign + pct + "%";
+  String line = padTo(name, 10) + " " + calcFmtPrice(a.close) + " (" +
+                fmtChange(a.change) + ")  " + arrow + " " + sign + pct + "%";
 
   String tags = "";
   if (a.golden)   tags += (tags.length() ? "  " : "") + String("⚑ golden cross");

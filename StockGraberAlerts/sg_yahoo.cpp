@@ -10,6 +10,7 @@
 
 static const char* BASE = "https://query1.finance.yahoo.com/v8/finance/chart/";
 static const uint32_t YAHOO_RETRY_MS = 2000;
+static const long long PREOPEN_SLACK_S = 3600;  // quote up to 1 h before its bar
 static const char* UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
   "(KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -127,12 +128,18 @@ bool yahooFetch(const String& symbol,
   String payload;
   if (!yahooGet(url, payload, err)) return false;
 
-  // Keep only the four arrays we need; everything else is discarded as it
-  // streams past, so the parsed document stays far smaller than the payload.
+  // Keep only the four arrays we need, plus the live quote from `meta`;
+  // everything else is discarded as it streams past, so the parsed document
+  // stays far smaller than the payload.
   PsramAllocator allocator;
   JsonDocument filter(&allocator);
   JsonObject res = filter["chart"]["result"][0].to<JsonObject>();
   res["timestamp"] = true;
+  JsonObject fm = res["meta"].to<JsonObject>();
+  fm["regularMarketPrice"]   = true;
+  fm["regularMarketDayHigh"] = true;
+  fm["regularMarketDayLow"]  = true;
+  fm["regularMarketTime"]    = true;
   JsonObject q = res["indicators"]["quote"][0].to<JsonObject>();
   q["close"] = true;
   q["high"]  = true;
@@ -165,14 +172,52 @@ bool yahooFetch(const String& symbol,
   }
 
   size_t n = stamps.size();
-  closes.reserve(n); highs.reserve(n); lows.reserve(n);
+  if (cIn.size() < n) n = cIn.size();
+  if (hIn.size() < n) n = hIn.size();
+  if (lIn.size() < n) n = lIn.size();
+  closes.reserve(n + 1); highs.reserve(n + 1); lows.reserve(n + 1);
   long long lastTs = 0;
-  for (size_t i = 0; i < n && i < cIn.size() && i < hIn.size() && i < lIn.size(); i++) {
+  for (size_t i = 0; i < n; i++) {
     if (cIn[i].isNull() || hIn[i].isNull() || lIn[i].isNull()) continue;
     closes.push_back(cIn[i].as<double>());
     highs.push_back(hIn[i].as<double>());
     lows.push_back(lIn[i].as<double>());
     lastTs = stamps[i].as<long long>();
+  }
+
+  // Yahoo often leaves the current session's daily bar empty (close: null),
+  // even after the close -- NVDA showed yesterday's 155.38 while the live price
+  // was 149.30. Dropping it reported yesterday as the latest day. The `meta`
+  // block always has the live quote, so it fills in (or refreshes) the bar of
+  // the session that quote belongs to: the newest bar stamped no later than an
+  // hour after the quote (Hong Kong's pre-open auction prices land a few
+  // minutes before the 01:30 UTC bar) and less than a day before it.
+  JsonObject meta = r0["meta"];
+  double livePrice = meta["regularMarketPrice"] | 0.0;
+  long long liveTs = meta["regularMarketTime"] | 0LL;
+  long long sessionTs = 0;
+  for (size_t i = n; i-- > 0;) {
+    long long t = stamps[i].as<long long>();
+    if (t <= liveTs + PREOPEN_SLACK_S) { sessionTs = t; break; }
+  }
+  if (livePrice > 0 && sessionTs > 0 && lastTs <= sessionTs &&
+      liveTs - sessionTs < 86400) {
+    double dayHigh = meta["regularMarketDayHigh"] | livePrice;
+    double dayLow  = meta["regularMarketDayLow"]  | livePrice;
+    if (dayHigh < livePrice) dayHigh = livePrice;
+    if (dayLow <= 0 || dayLow > livePrice) dayLow = livePrice;
+    if (lastTs == sessionTs && !closes.empty()) {
+      // Bar present: the live quote is fresher than the bar's close.
+      closes.back() = livePrice;
+      if (highs.back() < dayHigh) highs.back() = dayHigh;
+      if (lows.back() > dayLow)   lows.back()  = dayLow;
+    } else {
+      // Bar empty: rebuild it from the live quote.
+      closes.push_back(livePrice);
+      highs.push_back(dayHigh);
+      lows.push_back(dayLow);
+      lastTs = sessionTs;
+    }
   }
 
   if (closes.size() < 2 || lastTs == 0) {

@@ -16,23 +16,23 @@ ntfy, one-shot price alerts, plus remote commands (`status`, `list`, `<CODE>`,
 
 ## Prebuilt firmware
 
-**v1.2.2** is on the [releases page](https://github.com/Garionhk/-StockGraber-Alerts-ESP32-S3-Arduino/releases)
+**v1.2.3** is on the [releases page](https://github.com/Garionhk/-StockGraber-Alerts-ESP32-S3-Arduino/releases)
 for a 16 MB ESP32-S3 N16R8 — no toolchain needed. **New board:** write the
 merged image, then set it up from your phone (§4.1):
 
 ```
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 stockgraber-v1.2.2-esp32s3-n16r8.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 stockgraber-v1.2.3-esp32s3-n16r8.bin
 ```
 
 **Upgrading a StockGraber node:** write only the app, at `0x10000`. The merged
 image would overwrite the saved settings and watchlist with blank flash:
 
 ```
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x10000 stockgraber-v1.2.2-esp32s3-n16r8-app.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x10000 stockgraber-v1.2.3-esp32s3-n16r8-app.bin
 ```
 
  Checksum, release notes and the full
-flashing guide: [`dist/RELEASE-v1.2.2.md`](dist/RELEASE-v1.2.2.md),
+flashing guide: [`dist/RELEASE-v1.2.3.md`](dist/RELEASE-v1.2.3.md),
 [`flash.md`](flash.md).
 
 ---
@@ -209,7 +209,7 @@ Not stored in NVS — a normal reflash is enough.
 | `WL_MAX` | `sg_config.h` | 73 | `200` — max watchlist size (see §8) |
 | `AL_MAX` | `sg_alerts.h` | 28 | `50` — max price alerts (see §8) |
 | `ALERT_CHECK_MS` | `sg_alerts.cpp` | 11 | 5 min between price-alert sweeps |
-| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.2.2"` — shown at boot and in the startup notice; bump per release |
+| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.2.3"` — shown at boot and in the startup notice; bump per release |
 | `WDT_TIMEOUT_S` | `StockGraberAlerts.ino` | 34 | `120` — watchdog reboot timeout |
 | `NTP_RESYNC_MS` | `StockGraberAlerts.ino` | 35 | 24 h between clock resyncs |
 | `DUE_CHECK_MS` | `StockGraberAlerts.ino` | 36 | 60 s between "is a market due?" checks |
@@ -315,7 +315,7 @@ arduino-cli monitor -p /dev/cu.usbmodem14401 --config baudrate=115200
 A healthy boot:
 
 ```
-[sg] StockGraber Alerts v1.2.2 (ESP32-S3) starting
+[sg] StockGraber Alerts v1.2.3 (ESP32-S3) starting
 [sg] PSRAM: 8388608 bytes free 8386096
 [sg] press BOOT now to open the setup portal
 [sg] wifi: connecting to your-wifi
@@ -336,7 +336,7 @@ StockGraber - node started
 Reset: power-on
 IP: 192.168.1.42
 Settings: http://192.168.1.42
-Firmware: v1.2.2
+Firmware: v1.2.3
 Watchlist: 5 of 200 symbols
 Heap: 158 KB free
 Wi-Fi signal: -58 dBm
@@ -385,7 +385,7 @@ strings nvs.bin | grep -A1 watch
 | **Watchlist** | **200 symbols** (`WL_MAX` in `sg_config.h`) | `add` replies *"Already holding the maximum of 200 symbols"* and refuses. |
 | **Price alerts** | **50** (`AL_MAX` in `sg_alerts.h`) | `alert` replies *"Already holding the maximum of 50 alerts"*. |
 | NVS string | 4000 bytes | 200 typical symbols join to ~1.4 KB. A list of unusually long codes that outgrows it is refused with a *storage write failed* reply, never truncated. |
-| ntfy message body | 4 KB (ntfy.sh) | Long replies are **split** into parts of ≤ 3.8 KB: `… (1)`, `… (2)`, `… (3/3)`. ~48 symbol lines fit in a part at worst, ~130 at best. |
+| ntfy message body | 4 KB (ntfy.sh) | Long replies are **split** into parts of ≤ 3.8 KB: `… (1)`, `… (2)`, `… (3/3)`. ~39 symbol lines fit in a part at worst, ~75 typically. |
 | `status` runtime | ~3 s per symbol | 200 symbols ≈ 10–11 minutes, more when Yahoo drops connections. Every symbol is fetched first, then failures get a second pass after 15 s, then the parts go out in order. The watchdog is fed per fetch. |
 | Yahoo rate limit | not published | The real ceiling. Fetches are spaced 300 ms apart; a `429` or failed connection is retried up to twice (2 s, then 4 s). |
 
@@ -417,6 +417,17 @@ market's close. From the app you can send:
 | `<pass> alerts` | list price alerts |
 | `<pass> unalert AAPL` | cancel AAPL's alerts (`unalert AAPL 200` for just one) |
 | `<pass> factoryreset` | wipe settings, reboot into setup (watchlist kept) |
+
+Each symbol line gives the latest price, the change since the previous close
+and the change in percent, then any flags:
+
+```
+NVDA       149.30 (-6.08)  ▼ -3.91%
+CAD=X      1.42 (-0.0054)  ▼ -0.38%   ⚑ near 52w high
+```
+
+The price is Yahoo's live quote, so during a session it is the current price,
+not the last close.
 
 `add`/`remove`/`alert`/`unalert` **require** the passphrase even though queries don't — ntfy.sh
 topics are public, so an ungated topic stays read-only. Aliases work too
@@ -465,7 +476,7 @@ topics are public, so an ungated topic stays read-only. Aliases work too
 |---|---|
 | `StockGraberAlerts.ino` | boot flow (setup / AP fallback / online), Wi-Fi, NTP, scheduler, dispatch, watchdog, startup notice |
 | `sg_market.*` | market classification, close times, DST via POSIX TZ |
-| `sg_calc.*` | SMA 50/200 + cross, 52-week, change %, line formatting |
+| `sg_calc.*` | SMA 50/200 + cross, 52-week, change and change %, line formatting |
 | `sg_yahoo.*` | Yahoo chart API → OHLC, and latest quote for alerts |
 | `sg_ntfy.*` | publish + poll, with optional ntfy login; multi-part messages |
 | `sg_commands.*` | command parsing |
@@ -527,7 +538,7 @@ topics are public, so an ungated topic stays read-only. Aliases work too
 | `HTTP 404` on a symbol | Wrong Yahoo code (e.g. `BRK.B` instead of `BRK-B`). |
 | `HTTP 429` | Yahoo rate-limiting. The node retries once; if it persists, shorten the watchlist or send `status` less often. |
 | An alert never fired | Market closed (checks run only in market hours), or the price hasn't reached it yet. `alerts` shows what's still pending; serial shows `[sg] alerts: … quote failed` for bad codes set on the settings page. |
-| `status` arrives in several messages | Expected above ~48 symbols — ntfy's 4 KB limit (§8). |
+| `status` arrives in several messages | Expected above ~39 symbols — ntfy's 4 KB limit (§8). |
 | Compile errors mentioning `JsonDocument` or `Allocator` | ArduinoJson v6 installed; upgrade to v7. |
 | Compile error on `esp_task_wdt_init` | ESP32 core 2.x installed; needs 3.x. |
 

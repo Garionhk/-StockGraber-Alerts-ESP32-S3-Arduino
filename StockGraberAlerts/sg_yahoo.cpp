@@ -1,4 +1,5 @@
 #include "sg_yahoo.h"
+#include "sg_ntfy.h"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -73,13 +74,16 @@ static const int YAHOO_ATTEMPTS = 3;
 
 static bool yahooGet(const String& url, String& payload, String& err) {
   for (int attempt = 0; attempt < YAHOO_ATTEMPTS; attempt++) {
+    esp_task_wdt_reset();          // each attempt can take ~35 s at worst
     WiFiClientSecure client;
     client.setInsecure();          // no CA bundle -- see README's limitations
     client.setTimeout(15000);
+    client.setHandshakeTimeout(TLS_HANDSHAKE_S);
 
     HTTPClient http;
     http.setReuse(false);
     http.setTimeout(15000);
+    http.setConnectTimeout(TCP_CONNECT_MS);
     // Yahoo answers HTTP/1.1 with Transfer-Encoding: chunked, and getStream()
     // hands back the raw socket with the chunk framing still in it. HTTP/1.0 has
     // no chunked encoding, so the body arrives clean.

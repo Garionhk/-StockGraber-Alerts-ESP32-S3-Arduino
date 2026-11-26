@@ -6,6 +6,7 @@
 #include <base64.h>
 
 const char* NTFY_BOT_TAG = "sg_bot";
+uint32_t g_ntfyPollOk = 0, g_ntfyPollFail = 0;
 
 static String stripTrailingSlash(const String& s) {
   String out = s;
@@ -43,10 +44,12 @@ bool ntfyPublish(const Settings& s,
   WiFiClientSecure client;
   client.setInsecure();
   client.setTimeout(15000);
+  client.setHandshakeTimeout(TLS_HANDSHAKE_S);
 
   HTTPClient http;
   http.setReuse(false);
   http.setTimeout(15000);
+  http.setConnectTimeout(TCP_CONNECT_MS);
   if (!http.begin(client, host + "/" + t)) {
     err = "http begin failed";
     return false;
@@ -76,10 +79,12 @@ bool ntfyPoll(const Settings& s, String& since, std::vector<String>& out) {
   WiFiClientSecure client;
   client.setInsecure();
   client.setTimeout(15000);
+  client.setHandshakeTimeout(TLS_HANDSHAKE_S);
 
   HTTPClient http;
   http.setReuse(false);
   http.setTimeout(15000);
+  http.setConnectTimeout(TCP_CONNECT_MS);
   String url = host + "/" + t + "/json?poll=1&since=" + since;
   if (!http.begin(client, url)) return false;
   String auth = authHeader(s);
@@ -96,9 +101,11 @@ bool ntfyPoll(const Settings& s, String& since, std::vector<String>& out) {
     lastCode = code;
   }
   if (code != 200) {
+    g_ntfyPollFail++;
     http.end();
     return false;
   }
+  g_ntfyPollOk++;
 
   // Newline-delimited JSON: one object per line.
   Stream& stream = http.getStream();

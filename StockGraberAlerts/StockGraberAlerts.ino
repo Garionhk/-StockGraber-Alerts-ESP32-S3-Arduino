@@ -30,12 +30,11 @@
 #include "sg_webconfig.h"
 #include "sg_yahoo.h"
 
-static const char*    SG_VERSION      = "1.2.1";
+static const char*    SG_VERSION      = "1.2.2";
 
 static const uint32_t WDT_TIMEOUT_S   = 120;      // reboot if a loop wedges
 static const uint32_t NTP_RESYNC_MS   = 24UL * 3600UL * 1000UL;
 static const uint32_t DUE_CHECK_MS    = 60UL * 1000UL;
-static const uint32_t FETCH_GAP_MS    = 300;      // between report fetches (Yahoo 429)
 static const uint32_t WIFI_TIMEOUT_MS = 30000;    // first join at boot
 static const uint32_t WIFI_RETRY_MS   = 10000;    // re-join while in AP fallback
 static const uint32_t BOOT_WINDOW_MS  = 2000;     // time to press BOOT for setup
@@ -57,6 +56,8 @@ static uint32_t   g_lastPoll     = 0;
 static uint32_t   g_lastDueCheck = 0;
 static uint32_t   g_lastNtpSync  = 0;
 static uint32_t   g_lastWifiTry  = 0;
+static uint32_t   g_lastHealth   = 0;
+static const uint32_t HEALTH_LOG_MS = 5UL * 60UL * 1000UL;
 
 static void log(const String& msg) { Serial.println("[sg] " + msg); }
 
@@ -68,6 +69,9 @@ static bool wifiConnect(const Settings& s, uint32_t timeoutMs = WIFI_TIMEOUT_MS)
 
   log("wifi: connecting to " + s.wifiSsid);
   WiFi.mode(WIFI_STA);
+  // Modem sleep (the core's default) lets the radio doze between beacons;
+  // on this node that showed up as dropped TCP connections and failed polls.
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.begin(s.wifiSsid.c_str(), s.wifiPassword.c_str());
   uint32_t start = millis();
@@ -75,7 +79,8 @@ static bool wifiConnect(const Settings& s, uint32_t timeoutMs = WIFI_TIMEOUT_MS)
     delay(500);
   }
   if (WiFi.status() == WL_CONNECTED) {
-    log("wifi: ok " + WiFi.localIP().toString());
+    log("wifi: ok " + WiFi.localIP().toString() + " rssi " + String(WiFi.RSSI()) +
+      " dBm");
     return true;
   }
   log("wifi: FAILED");
@@ -119,7 +124,8 @@ static void announceStart(const Settings& s, bool atBoot) {
                 "\nFirmware: v" + SG_VERSION +
                 "\nWatchlist: " + String((int)wlAll().size()) + " of " +
                 String((int)WL_MAX) + " symbols" +
-                "\nHeap: " + String(ESP.getFreeHeap() / 1024) + " KB free";
+                "\nHeap: " + String(ESP.getFreeHeap() / 1024) + " KB free" +
+                "\nWi-Fi signal: " + String(WiFi.RSSI()) + " dBm";
   if (ESP.getPsramSize())
     body += "\nPSRAM: " + String(ESP.getPsramSize() / 1024) + " KB";
   String err;
@@ -132,21 +138,6 @@ static void announceStart(const Settings& s, bool atBoot) {
 
 // ---- report path ---------------------------------------------------------
 
-static Analysis analyseSymbol(const String& symbol, double prox) {
-  std::vector<double> closes, highs, lows;
-  String lastDate, err;
-  if (!yahooFetch(symbol, closes, highs, lows, lastDate, err)) {
-    log("fetch failed: " + symbol + " (" + err + ")");
-    Analysis a;
-    a.symbol = symbol;
-    a.symbol.toUpperCase();
-    a.ok = false;
-    a.error = err;
-    return a;
-  }
-  return calcAnalyze(symbol, closes, highs, lows, lastDate, prox);
-}
-
 static void sendMarketReport(const Settings& s, const char* market,
                              const std::vector<String>& symbols) {
   // The date is only known once a fetch succeeds, but full parts go out as they
@@ -158,13 +149,14 @@ static void sendMarketReport(const Settings& s, const char* market,
 
   // A large watchlist can outgrow ntfy's 4 KB body; the chunker splits it, and
   // only the part holding a golden/death cross is sent at the higher priority.
+  // Fetch everything first (failures get a second pass), then send in order.
+  int failedFirst, missing;
+  std::vector<Analysis> results =
+      analyseAll(symbols, s.proximityPct, failedFirst, missing);
   NtfyChunker out(s, title, 3, tags, 4, crossTags);
-  for (size_t i = 0; i < symbols.size(); i++) {
-    if (i) delay(FETCH_GAP_MS);
-    Analysis a = analyseSymbol(symbols[i], s.proximityPct);
+  for (const Analysis& a : results) {
     if (a.ok && (a.golden || a.death)) out.markUrgent();
     out.addLine(calcSymbolLine(a));
-    esp_task_wdt_reset();             // fetches are slow; keep the dog happy
   }
 
   String err;
@@ -311,6 +303,12 @@ static void netTask(void*) {
         checkDue(s);
       }
       alertsTick(s);                     // at most one quote per pass
+      if (millis() - g_lastHealth >= HEALTH_LOG_MS) {
+        g_lastHealth = millis();
+        log("health: rssi " + String(WiFi.RSSI()) + " dBm, ntfy polls " +
+            String(g_ntfyPollOk) + " ok / " + String(g_ntfyPollFail) +
+            " failed, heap " + String(ESP.getFreeHeap() / 1024) + " KB");
+      }
       if (millis() - g_lastNtpSync >= NTP_RESYNC_MS) {
         if (ntpSync()) g_lastNtpSync = millis();
       }

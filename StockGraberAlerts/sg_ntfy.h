@@ -16,6 +16,18 @@
 
 extern const char* NTFY_BOT_TAG;    // "sg_bot"
 
+// TLS handshake limit for every HTTPS call, in seconds. The core defaults to
+// 120 s -- the same as the task watchdog -- so one stalled handshake with
+// Yahoo or ntfy used to reboot the node ("Reset: task watchdog").
+static const unsigned long TLS_HANDSHAKE_S = 15;
+
+// TCP connect limit, in ms. The core's 5 s gives up just short of a dropped
+// SYN being resent (Yahoo was seen taking 7 s to accept).
+static const int32_t TCP_CONNECT_MS = 10000;
+
+// Poll outcomes since boot, for the periodic health line in the log.
+extern uint32_t g_ntfyPollOk, g_ntfyPollFail;
+
 // Server, topic and login all come from `s`. A token is sent as Bearer, a
 // username as Basic; with neither, the request is anonymous.
 bool ntfyPublish(const Settings& s,

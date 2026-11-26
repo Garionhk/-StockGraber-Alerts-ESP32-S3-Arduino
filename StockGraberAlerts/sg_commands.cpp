@@ -52,6 +52,43 @@ static Analysis analyseSymbol(const String& symbol, double proximityPct) {
   return calcAnalyze(symbol, closes, highs, lows, lastDate, proximityPct);
 }
 
+// Pause before the second pass, fed to the watchdog in slices.
+static const uint32_t SECOND_PASS_WAIT_MS = 15000;
+
+std::vector<Analysis> analyseAll(const std::vector<String>& symbols,
+                                 double proximityPct,
+                                 int& failedFirst, int& missing) {
+  std::vector<Analysis> out;
+  out.reserve(symbols.size());
+  for (size_t i = 0; i < symbols.size(); i++) {
+    if (i) delay(FETCH_GAP_MS);
+    out.push_back(analyseSymbol(symbols[i], proximityPct));
+    esp_task_wdt_reset();   // one HTTPS fetch per symbol; don't trip the dog
+  }
+
+  failedFirst = 0;
+  for (const Analysis& a : out) if (!a.ok) failedFirst++;
+  missing = failedFirst;
+  if (!failedFirst) return out;
+
+  Serial.println("[sg] " + String(failedFirst) + " symbol(s) failed; second pass in " +
+                 String(SECOND_PASS_WAIT_MS / 1000) + " s");
+  for (uint32_t waited = 0; waited < SECOND_PASS_WAIT_MS; waited += 1000) {
+    esp_task_wdt_reset();
+    delay(1000);
+  }
+  for (size_t i = 0; i < out.size(); i++) {
+    if (out[i].ok) continue;
+    delay(FETCH_GAP_MS);
+    Analysis again = analyseSymbol(symbols[i], proximityPct);
+    esp_task_wdt_reset();
+    if (again.ok) { out[i] = again; missing--; }
+  }
+  Serial.println("[sg] second pass: " + String(failedFirst - missing) + " recovered, " +
+                 String(missing) + " still missing");
+  return out;
+}
+
 static String firstToken(const String& s, int& endIdx) {
   int i = 0;
   while (i < (int)s.length() && isspace((unsigned char)s[i])) i++;
@@ -166,12 +203,13 @@ bool cmdHandle(const String& text, const Settings& s, String& title, String& bod
     if (syms.empty()) { body = "Watchlist is empty."; return true; }
     // Up to 200 symbols at ~3 s each: full parts go out as they fill, and the
     // last one comes back to the caller like any other reply.
+    // Everything is fetched (and failures retried) before the first part goes
+    // out, so parts stay in watchlist order.
+    int failedFirst, missing;
+    std::vector<Analysis> results =
+        analyseAll(syms, s.proximityPct, failedFirst, missing);
     NtfyChunker out(s, title, 3, NTFY_BOT_TAG, 3, NTFY_BOT_TAG);
-    for (size_t i = 0; i < syms.size(); i++) {
-      if (i) delay(FETCH_GAP_MS);
-      out.addLine(calcSymbolLine(analyseSymbol(syms[i], s.proximityPct)));
-      esp_task_wdt_reset();   // one HTTPS fetch per symbol; don't trip the dog
-    }
+    for (const Analysis& a : results) out.addLine(calcSymbolLine(a));
     int prio;
     String tags;
     out.takeLast(title, body, prio, tags);

@@ -187,18 +187,26 @@ String alDescribe(const Alert& a) {
 
 // ---- checking ------------------------------------------------------------
 
-static std::vector<String> g_pending;         // symbols left in this sweep
+static const uint32_t ALERT_RETRY_MS = 60UL * 1000UL;   // recheck a failed quote
+
+// Symbols left in this sweep. `retry` marks a recheck of a failed quote; a
+// recheck that fails again waits for the next regular sweep.
+struct Pending { String symbol; bool retry; };
+static std::vector<Pending> g_pending;
+static std::vector<String>  g_retry;          // failed quotes awaiting recheck
+static uint32_t g_retryAt   = 0;              // when the first of them failed
 static uint32_t g_lastSweep = 0;
 static uint32_t g_lastFetch = 0;
 static bool     g_started   = false;
 
-// Fetches one symbol and fires whatever it satisfies.
-static void checkSymbol(const Settings& s, const String& symbol) {
+// Fetches one symbol and fires whatever it satisfies. False when the quote
+// could not be fetched.
+static bool checkSymbol(const Settings& s, const String& symbol) {
   Quote q;
   String err;
   if (!yahooQuote(symbol, q, err)) {
     log(symbol + " quote failed (" + err + ")");
-    return;
+    return false;
   }
 
   time_t now = time(nullptr);
@@ -250,6 +258,7 @@ static void checkSymbol(const Settings& s, const String& symbol) {
     log("fired " + alDescribe(a) + " at " + alFmtPrice(probe));
     if (!removeExact(a)) log("could not remove " + alDescribe(a));
   }
+  return true;
 }
 
 void alertsTick(const Settings& s) {
@@ -261,6 +270,14 @@ void alertsTick(const Settings& s) {
     g_lastSweep = nowMs - ALERT_CHECK_MS + ALERT_FIRST_MS;
   }
 
+  if (g_pending.empty() && !g_retry.empty() &&
+      nowMs - g_retryAt >= ALERT_RETRY_MS) {
+    log("rechecking " + String((int)g_retry.size()) + " failed quote(s)");
+    for (const String& sym : g_retry) g_pending.push_back({sym, true});
+    g_retry.clear();
+    return;
+  }
+
   if (g_pending.empty()) {
     if (nowMs - g_lastSweep < ALERT_CHECK_MS) return;
     g_lastSweep = nowMs;
@@ -270,15 +287,20 @@ void alertsTick(const Settings& s) {
     for (const Alert& a : alAll()) {
       if (!marketIsOpen(marketOf(a.symbol), now)) continue;
       bool dup = false;
-      for (const String& p : g_pending) dup = dup || p == a.symbol;
-      if (!dup) g_pending.push_back(a.symbol);
+      for (const Pending& p : g_pending) dup = dup || p.symbol == a.symbol;
+      if (!dup) g_pending.push_back({a.symbol, false});
     }
     return;
   }
 
   if (nowMs - g_lastFetch < ALERT_FETCH_GAP_MS) return;
   g_lastFetch = nowMs;
-  String symbol = g_pending.back();
+  Pending next = g_pending.back();
   g_pending.pop_back();
-  checkSymbol(s, symbol);
+  if (checkSymbol(s, next.symbol) || next.retry) return;
+  bool dup = false;
+  for (const String& r : g_retry) dup = dup || r == next.symbol;
+  if (dup) return;
+  if (g_retry.empty()) g_retryAt = nowMs;
+  g_retry.push_back(next.symbol);
 }

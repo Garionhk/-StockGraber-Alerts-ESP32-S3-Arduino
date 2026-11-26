@@ -16,15 +16,15 @@ ntfy, one-shot price alerts, plus remote commands (`status`, `list`, `<CODE>`,
 
 ## Prebuilt firmware
 
-**v1.2.1** is in [`dist/`](dist/): `stockgraber-v1.2.1-esp32s3-n16r8.bin`, a
+**v1.2.2** is in [`dist/`](dist/): `stockgraber-v1.2.2-esp32s3-n16r8.bin`, a
 merged image for a 16 MB ESP32-S3 N16R8 — no toolchain needed:
 
 ```
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 dist/stockgraber-v1.2.1-esp32s3-n16r8.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 dist/stockgraber-v1.2.2-esp32s3-n16r8.bin
 ```
 
 Then set it up from your phone (§4.1). Checksum, release notes and the full
-flashing guide: [`dist/RELEASE-v1.2.1.md`](dist/RELEASE-v1.2.1.md),
+flashing guide: [`dist/RELEASE-v1.2.2.md`](dist/RELEASE-v1.2.2.md),
 [`flash.md`](flash.md).
 
 ---
@@ -201,7 +201,7 @@ Not stored in NVS — a normal reflash is enough.
 | `WL_MAX` | `sg_config.h` | 73 | `200` — max watchlist size (see §8) |
 | `AL_MAX` | `sg_alerts.h` | 28 | `50` — max price alerts (see §8) |
 | `ALERT_CHECK_MS` | `sg_alerts.cpp` | 11 | 5 min between price-alert sweeps |
-| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.2.1"` — shown at boot and in the startup notice; bump per release |
+| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.2.2"` — shown at boot and in the startup notice; bump per release |
 | `WDT_TIMEOUT_S` | `StockGraberAlerts.ino` | 34 | `120` — watchdog reboot timeout |
 | `NTP_RESYNC_MS` | `StockGraberAlerts.ino` | 35 | 24 h between clock resyncs |
 | `DUE_CHECK_MS` | `StockGraberAlerts.ino` | 36 | 60 s between "is a market due?" checks |
@@ -303,7 +303,7 @@ arduino-cli monitor -p /dev/cu.usbmodem14401 --config baudrate=115200
 A healthy boot:
 
 ```
-[sg] StockGraber Alerts v1.2.1 (ESP32-S3) starting
+[sg] StockGraber Alerts v1.2.2 (ESP32-S3) starting
 [sg] PSRAM: 8388608 bytes free 8386096
 [sg] press BOOT now to open the setup portal
 [sg] wifi: connecting to your-wifi
@@ -324,14 +324,18 @@ StockGraber - node started
 Reset: power-on
 IP: 192.168.1.42
 Settings: http://192.168.1.42
-Firmware: v1.2.1
+Firmware: v1.2.2
 Watchlist: 5 of 200 symbols
 Heap: 158 KB free
+Wi-Fi signal: -58 dBm
 PSRAM: 8192 KB
 ```
 
 The `Reset:` line distinguishes a power cycle from a watchdog trip, a crash, or
 a brownout — so an unexplained reboot is diagnosable without a serial cable.
+`Wi-Fi signal` below about -70 dBm means dropped connections; move the board
+closer to the router. Over serial, a `health:` line every 5 minutes shows the
+signal, ntfy polls succeeded/failed and free heap.
 After a Wi-Fi outage the node sends a similar *back online* notice, since its
 IP (and so the settings URL) may have changed.
 
@@ -370,8 +374,8 @@ strings nvs.bin | grep -A1 watch
 | **Price alerts** | **50** (`AL_MAX` in `sg_alerts.h`) | `alert` replies *"Already holding the maximum of 50 alerts"*. |
 | NVS string | 4000 bytes | 200 typical symbols join to ~1.4 KB. A list of unusually long codes that outgrows it is refused with a *storage write failed* reply, never truncated. |
 | ntfy message body | 4 KB (ntfy.sh) | Long replies are **split** into parts of ≤ 3.8 KB: `… (1)`, `… (2)`, `… (3/3)`. ~48 symbol lines fit in a part at worst, ~130 at best. |
-| `status` runtime | ~3 s per symbol | 200 symbols ≈ 10–11 minutes. Parts arrive as they fill, so you see progress. The watchdog is fed per symbol. |
-| Yahoo rate limit | not published | The real ceiling. Fetches are spaced 300 ms apart and a `429` is retried once after 2 s. |
+| `status` runtime | ~3 s per symbol | 200 symbols ≈ 10–11 minutes, more when Yahoo drops connections. Every symbol is fetched first, then failures get a second pass after 15 s, then the parts go out in order. The watchdog is fed per fetch. |
+| Yahoo rate limit | not published | The real ceiling. Fetches are spaced 300 ms apart; a `429` or failed connection is retried up to twice (2 s, then 4 s). |
 
 The caps are *runtime* limits, not storage or memory ones — the 8 MB PSRAM is
 barely touched. What binds is Yahoo: `status` makes one HTTPS request per
@@ -486,6 +490,9 @@ topics are public, so an ungated topic stays read-only. Aliases work too
 - **The watchdog is fed per symbol.** Both the report path and the `status`
   command reset the task WDT inside their fetch loops; without that, a long
   watchlist reboots the board mid-reply.
+- **Every HTTPS call is time-boxed below the watchdog.** TCP connect 10 s, TLS
+  handshake 15 s, reads 15 s. The core's own handshake default is 120 s — the
+  same as the watchdog — so one stalled handshake used to reboot the node.
 - **Settings live in NVS, not the binary.** The portal is the WOL-NTFY
   project's design: SoftAP + captive portal before provisioning, SoftAP + STA as
   a fallback while Wi-Fi is down, and a login-protected page on the LAN. DNS is

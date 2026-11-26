@@ -9,7 +9,17 @@
 #pragma once
 
 #include <Arduino.h>
+#include <vector>
+#include "sg_calc.h"
 #include "sg_config.h"
+
+// Fetch + analyse a list of symbols, in order. Symbols that fail the first
+// pass are fetched once more after a pause, since Yahoo's dropped connections
+// come in bursts. `failedFirst` / `missing` count symbols that failed the first
+// pass and both passes. Feeds the watchdog throughout.
+std::vector<Analysis> analyseAll(const std::vector<String>& symbols,
+                                 double proximityPct,
+                                 int& failedFirst, int& missing);
 
 // Returns false when the message should be ignored entirely (bad/missing
 // passphrase). Otherwise fills title/body with the reply to publish.

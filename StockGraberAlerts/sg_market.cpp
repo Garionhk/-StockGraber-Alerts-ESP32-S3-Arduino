@@ -1,16 +1,18 @@
 #include "sg_market.h"
 
+#include <algorithm>
+
 const char* const MARKET_ORDER[] = {
-  "US", "CA", "HK", "CN", "COMMODITY", "CRYPTO", "OTHER"
+  "US", "CA", "HK", "CN", "FX", "COMMODITY", "CRYPTO", "OTHER"
 };
-const int MARKET_COUNT = 7;
+const int MARKET_COUNT = 8;
 
 // US/Canada follow the post-2007 rule (2nd Sun Mar -> 1st Sun Nov); Hong Kong
-// and China have no DST. Commodities and crypto trade around the clock, so
-// they piggyback the US close and report Mon-Fri like everything else.
+// and China have no DST. Currencies, commodities and crypto trade around the
+// clock, so they piggyback the US close and report Mon-Fri like everything else.
 //
 // openMin only drives price-alert checks. -1 means "any time on a local
-// weekday": futures trade nearly around the clock, and OTHER covers exchanges
+// weekday": currencies and futures trade nearly around the clock, and OTHER covers exchanges
 // whose hours this table does not know, so both are checked all weekday.
 struct MarketDef {
   const char* key; const char* label; const char* tz; int openMin; int closeMin;
@@ -21,6 +23,7 @@ static const MarketDef DEFS[] = {
   {"CA",        "Canada",      "EST5EDT,M3.2.0,M11.1.0",  9 * 60 + 30, 16 * 60},
   {"HK",        "Hong Kong",   "HKT-8",                   9 * 60 + 30, 16 * 60},
   {"CN",        "China",       "CST-8",                   9 * 60 + 30, 15 * 60},
+  {"FX",        "Currencies",  "EST5EDT,M3.2.0,M11.1.0", -1,           16 * 60},
   {"COMMODITY", "Commodities", "EST5EDT,M3.2.0,M11.1.0", -1,           16 * 60},
   {"CRYPTO",    "Crypto",      "EST5EDT,M3.2.0,M11.1.0", -1,           16 * 60},
   {"OTHER",     "Other",       "EST5EDT,M3.2.0,M11.1.0", -1,           16 * 60},
@@ -56,6 +59,7 @@ const char* marketOf(const String& symbol) {
   if (endsWith(s, "-USD") || endsWith(s, "-USDT") || endsWith(s, "-USDC"))
     return "CRYPTO";
   if (endsWith(s, "=F")) return "COMMODITY";
+  if (endsWith(s, "=X")) return "FX";       // CAD=X, CADCNY=X, EURUSD=X
 
   static const char* const CA_IDX[] = {"^GSPTSE"};
   static const char* const HK_IDX[] = {"^HSI", "^HSCE"};
@@ -105,4 +109,26 @@ String marketLocalDate(const char* market, time_t utc) {
   snprintf(buf, sizeof(buf), "%04d-%02d-%02d",
            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
   return String(buf);
+}
+
+int marketRank(const char* market) {
+  for (int i = 0; i < MARKET_COUNT; i++)
+    if (strcmp(MARKET_ORDER[i], market) == 0) return i;
+  return MARKET_COUNT - 1;
+}
+
+static String sortKey(const String& symbol) {
+  String k = symbol;
+  k.toUpperCase();
+  if (k.startsWith("^")) k = k.substring(1);
+  return k;
+}
+
+void sortByMarket(std::vector<String>& symbols) {
+  std::stable_sort(symbols.begin(), symbols.end(),
+                   [](const String& a, const String& b) {
+    int ra = marketRank(marketOf(a)), rb = marketRank(marketOf(b));
+    if (ra != rb) return ra < rb;
+    return strcmp(sortKey(a).c_str(), sortKey(b).c_str()) < 0;
+  });
 }

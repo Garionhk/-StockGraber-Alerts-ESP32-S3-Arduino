@@ -7,12 +7,18 @@
 
 #include <Arduino.h>
 #include <time.h>
+#include <vector>
 
 // Report order, matching notify.MARKET_ORDER on the Pi.
 extern const char* const MARKET_ORDER[];
 extern const int MARKET_COUNT;
 
-const char* marketOf(const String& symbol);        // "US", "HK", "CRYPTO", ...
+const char* marketOf(const String& symbol);
+// Position of a market in MARKET_ORDER (OTHER and unknown keys last).
+int         marketRank(const char* market);
+// Sorts for display: by market in MARKET_ORDER, then by code A-Z, ignoring
+// case and an index's leading '^' (so ^DJI sits among the D's).
+void        sortByMarket(std::vector<String>& symbols);        // "US", "HK", "FX", "CRYPTO", ...
 const char* marketLabel(const char* market);       // "Hong Kong", "Crypto", ...
 const char* marketTz(const char* market);          // POSIX TZ string
 int         marketCloseMinutes(const char* market);// minutes past local midnight

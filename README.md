@@ -16,23 +16,23 @@ ntfy, one-shot price alerts, plus remote commands (`status`, `list`, `<CODE>`,
 
 ## Prebuilt firmware
 
-**v1.2.3** is on the [releases page](https://github.com/Garionhk/-StockGraber-Alerts-ESP32-S3-Arduino/releases)
+**v1.2.4** is on the [releases page](https://github.com/Garionhk/-StockGraber-Alerts-ESP32-S3-Arduino/releases)
 for a 16 MB ESP32-S3 N16R8 — no toolchain needed. **New board:** write the
 merged image, then set it up from your phone (§4.1):
 
 ```
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 stockgraber-v1.2.3-esp32s3-n16r8.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x0 stockgraber-v1.2.4-esp32s3-n16r8.bin
 ```
 
 **Upgrading a StockGraber node:** write only the app, at `0x10000`. The merged
 image would overwrite the saved settings and watchlist with blank flash:
 
 ```
-esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x10000 stockgraber-v1.2.3-esp32s3-n16r8-app.bin
+esptool --port /dev/cu.usbmodem14401 --baud 460800 write-flash 0x10000 stockgraber-v1.2.4-esp32s3-n16r8-app.bin
 ```
 
  Checksum, release notes and the full
-flashing guide: [`dist/RELEASE-v1.2.3.md`](dist/RELEASE-v1.2.3.md),
+flashing guide: [`dist/RELEASE-v1.2.4.md`](dist/RELEASE-v1.2.4.md),
 [`flash.md`](flash.md).
 
 ---
@@ -209,7 +209,7 @@ Not stored in NVS — a normal reflash is enough.
 | `WL_MAX` | `sg_config.h` | 73 | `200` — max watchlist size (see §8) |
 | `AL_MAX` | `sg_alerts.h` | 28 | `50` — max price alerts (see §8) |
 | `ALERT_CHECK_MS` | `sg_alerts.cpp` | 11 | 5 min between price-alert sweeps |
-| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.2.3"` — shown at boot and in the startup notice; bump per release |
+| `SG_VERSION` | `StockGraberAlerts.ino` | 33 | `"1.2.4"` — shown at boot and in the startup notice; bump per release |
 | `WDT_TIMEOUT_S` | `StockGraberAlerts.ino` | 34 | `120` — watchdog reboot timeout |
 | `NTP_RESYNC_MS` | `StockGraberAlerts.ino` | 35 | 24 h between clock resyncs |
 | `DUE_CHECK_MS` | `StockGraberAlerts.ino` | 36 | 60 s between "is a market due?" checks |
@@ -315,7 +315,7 @@ arduino-cli monitor -p /dev/cu.usbmodem14401 --config baudrate=115200
 A healthy boot:
 
 ```
-[sg] StockGraber Alerts v1.2.3 (ESP32-S3) starting
+[sg] StockGraber Alerts v1.2.4 (ESP32-S3) starting
 [sg] PSRAM: 8388608 bytes free 8386096
 [sg] press BOOT now to open the setup portal
 [sg] wifi: connecting to your-wifi
@@ -336,7 +336,7 @@ StockGraber - node started
 Reset: power-on
 IP: 192.168.1.42
 Settings: http://192.168.1.42
-Firmware: v1.2.3
+Firmware: v1.2.4
 Watchlist: 5 of 200 symbols
 Heap: 158 KB free
 Wi-Fi signal: -58 dBm
@@ -429,6 +429,10 @@ CAD=X      1.42 (-0.0054)  ▼ -0.38%   ⚑ near 52w high
 The price is Yahoo's live quote, so during a session it is the current price,
 not the last close.
 
+`status` and `list` group symbols by market (US, Canada, Hong Kong, China,
+Currencies, Commodities, Crypto, Other), A-Z by code within each. Codes ending
+in `=X` are currencies, with their own daily report after the US close.
+
 `add`/`remove`/`alert`/`unalert` **require** the passphrase even though queries don't — ntfy.sh
 topics are public, so an ungated topic stays read-only. Aliases work too
 (`add gold` → `GC=F`, `add btc` → `BTC-USD`).
@@ -438,6 +442,7 @@ topics are public, so an ungated topic stays read-only. Aliases work too
 | Instrument | Code |
 |---|---|
 | Gold futures | `GC=F` |
+| US dollar in Canadian dollars | `CAD=X` |
 | Bitcoin | `BTC-USD` |
 | Berkshire class B | `BRK-B` (hyphen, **not** `BRK.B`) |
 | Hang Seng index | `^HSI` |
@@ -457,7 +462,7 @@ topics are public, so an ungated topic stays read-only. Aliases work too
 - **Any symbol** — it doesn't have to be on the watchlist. It is checked against
   Yahoo first, and **refused if the price is already past the target**.
 - **Checked every 5 minutes** while that symbol's market is open (regular hours
-  plus 20 min after the close; crypto around the clock; futures all weekday).
+  plus 20 min after the close; crypto around the clock; currencies and futures all weekday).
 - **Brief touches count.** If a whole session has passed since you set the
   alert, the session's high/low is compared, so a spike between two checks
   still fires. On the day you set it, only the live price counts — the day's

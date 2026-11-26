@@ -1,6 +1,7 @@
 #include "sg_commands.h"
 #include "sg_alerts.h"
 #include "sg_calc.h"
+#include "sg_market.h"
 #include "sg_ntfy.h"
 #include "sg_webconfig.h"
 #include "sg_yahoo.h"
@@ -204,12 +205,23 @@ bool cmdHandle(const String& text, const Settings& s, String& title, String& bod
     // Up to 200 symbols at ~3 s each: full parts go out as they fill, and the
     // last one comes back to the caller like any other reply.
     // Everything is fetched (and failures retried) before the first part goes
-    // out, so parts stay in watchlist order.
+    // out, so parts stay in order.
+    // Grouped by market (US, Canada, Hong Kong, ...), A-Z within each, under a
+    // heading per market.
+    sortByMarket(syms);
     int failedFirst, missing;
     std::vector<Analysis> results =
         analyseAll(syms, s.proximityPct, failedFirst, missing);
     NtfyChunker out(s, title, 3, NTFY_BOT_TAG, 3, NTFY_BOT_TAG);
-    for (const Analysis& a : results) out.addLine(calcSymbolLine(a));
+    const char* group = nullptr;
+    for (const Analysis& a : results) {
+      const char* m = marketOf(a.symbol);
+      if (!group || strcmp(group, m) != 0) {
+        out.addLine(String("-- ") + marketLabel(m) + " --");
+        group = m;
+      }
+      out.addLine(calcSymbolLine(a));
+    }
     int prio;
     String tags;
     out.takeLast(title, body, prio, tags);
@@ -220,10 +232,19 @@ bool cmdHandle(const String& text, const Settings& s, String& title, String& bod
     std::vector<String> syms = wlAll();
     title = "StockGraber - watchlist";
     if (syms.empty()) { body = "Watchlist is empty."; return true; }
+    // One line per market, codes A-Z: "US: AAPL, AMD, ..."
+    sortByMarket(syms);
     body = "";
-    for (size_t i = 0; i < syms.size(); i++) {
-      if (i) body += ", ";
-      body += syms[i];
+    const char* group = nullptr;
+    for (const String& sym : syms) {
+      const char* m = marketOf(sym);
+      if (!group || strcmp(group, m) != 0) {
+        if (group) body += "\n";
+        body += String(marketLabel(m)) + ": " + sym;
+        group = m;
+      } else {
+        body += ", " + sym;
+      }
     }
     return true;
   }
